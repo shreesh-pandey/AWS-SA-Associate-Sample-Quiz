@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AWS Quiz App – SA Associate</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col items-center justify-start p-4">
+  <div class="w-full max-w-2xl bg-white p-6 rounded-2xl shadow-xl">
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-xl font-bold">AWS Quiz – Solutions Architect Associate</h1>
+    </div>
+
+    <div id="category-filter" class="mb-4 flex flex-wrap gap-2"></div>
+    <div class="mb-4">
+      <label class="flex items-center gap-2 text-sm">
+        <input type="checkbox" id="shuffleToggle" class="form-checkbox" />
+        Shuffle 50 random questions
+      </label>
+    </div>
+    <div id="progress-bar-container" class="w-full bg-gray-200 rounded-full h-2 mb-4">
+      <div id="progress-bar" class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div>
+    </div>
+
+    <div id="timer" class="text-right text-sm font-semibold text-red-500 mb-2 hidden">⏱️ Time left: <span id="timer-value"></span>s</div>
+    <div id="quiz-container" class="space-y-4"></div>
+
+    <button id="next-btn" class="mt-6 w-full bg-blue-600 text-white py-2 px-4 rounded-xl hover:bg-blue-700 transition hidden">Next Question</button>
+    <div id="score-container" class="mt-6 text-center font-semibold hidden"></div>
+  </div>
+
+  <script>
+    const quizDataUrl = 'questions.json?v=' + new Date().getTime();
+    const quizContainer = document.getElementById('quiz-container');
+    const nextBtn = document.getElementById('next-btn');
+    const scoreContainer = document.getElementById('score-container');
+    const progressBar = document.getElementById('progress-bar');
+    const timerDisplay = document.getElementById('timer');
+    const timerValue = document.getElementById('timer-value');
+    const categoryFilter = document.getElementById('category-filter');
+
+    let questions = [], currentIndex = 0, score = 0, timer, selectedCategory = null, filteredQuestions = [];
+
+    fetch(quizDataUrl)
+      .then(res => res.json())
+      .then(data => {
+        const categories = [...new Set(data.flatMap(q => q.tags || []))];
+        if (categories.length > 0) {
+          categoryFilter.innerHTML = `<button onclick="filterCategory(null)" class="px-2 py-1 text-sm rounded bg-blue-100">All</button>` +
+            categories.map(cat => `<button onclick="filterCategory('${cat}')" class="px-2 py-1 text-sm rounded bg-blue-100">${cat}</button>`).join('');
+        }
+        questions = data;
+        filterCategory(null);
+
+        document.getElementById('shuffleToggle')?.addEventListener('change', () => {
+          filterCategory(selectedCategory);
+        });
+      });
+
+    function shuffleArray(arr) {
+      return [...arr].sort(() => Math.random() - 0.5);
+    }
+
+    function filterCategory(category) {
+      selectedCategory = category;
+      currentIndex = 0;
+      score = 0;
+
+      filteredQuestions = selectedCategory
+        ? questions.filter(q => q.tags?.includes(category))
+        : [...questions];
+
+      const shuffleEnabled = document.getElementById('shuffleToggle')?.checked;
+      if (shuffleEnabled) {
+        filteredQuestions = shuffleArray(filteredQuestions).slice(0, 50);
+      }
+
+      showQuestion();
+    }
+
+    function showQuestion() {
+      clearInterval(timer);
+      if (currentIndex >= filteredQuestions.length) {
+        quizContainer.innerHTML = '';
+        scoreContainer.textContent = `🎉 You answered ${score} out of ${filteredQuestions.length} correctly.`;
+        scoreContainer.classList.remove('hidden');
+        nextBtn.classList.add('hidden');
+        progressBar.style.width = '100%';
+        return;
+      }
+
+      const current = filteredQuestions[currentIndex];
+      quizContainer.innerHTML = `
+        <div>
+          <p class="text-lg font-medium mb-3">Q${currentIndex + 1}. ${current.question}</p>
+          <div class="space-y-2">
+            ${current.options.map(opt => `
+              <button class="w-full border rounded-xl py-2 px-4 text-left hover:bg-gray-100 transition" data-label="${opt.label}" data-correct="${opt.correct}">
+                ${opt.label}. ${opt.text}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      progressBar.style.width = `${(currentIndex / filteredQuestions.length) * 100}%`;
+      nextBtn.classList.add('hidden');
+      scoreContainer.classList.add('hidden');
+      timerDisplay.classList.remove('hidden');
+
+      let timeLeft = 30;
+      timerValue.textContent = timeLeft;
+      timer = setInterval(() => {
+        timeLeft--;
+        timerValue.textContent = timeLeft;
+        if (timeLeft <= 0) {
+          clearInterval(timer);
+          lockOptions();
+        }
+      }, 1000);
+
+      document.querySelectorAll('button[data-label]').forEach(btn => {
+        btn.onclick = () => {
+          if (btn.disabled) return;
+          const correct = btn.getAttribute('data-correct') === 'true';
+          if (correct) {
+            btn.classList.add('bg-green-200');
+            score++;
+          } else {
+            btn.classList.add('bg-red-200');
+          }
+          lockOptions();
+        };
+      });
+    }
+
+    function lockOptions() {
+      clearInterval(timer);
+      document.querySelectorAll('button[data-label]').forEach(b => b.disabled = true);
+      nextBtn.classList.remove('hidden');
+      timerDisplay.classList.add('hidden');
+      progressBar.style.width = `${((currentIndex + 1) / filteredQuestions.length) * 100}%`;
+    }
+
+    nextBtn.onclick = () => {
+      currentIndex++;
+      showQuestion();
+    };
+  </script>
+</body>
+</html>
